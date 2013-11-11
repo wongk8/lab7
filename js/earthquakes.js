@@ -24,9 +24,105 @@ gov.usgs.quakes;
 //reference to our google map
 gov.usgs.quakesMap;
 
+// reference to the latest infoWindow object
+gov.usgs.iw;
+
 //AJAX Error event handler
 //just alerts the user of the error
 $(document).ajaxError(function(event, jqXHR, err){
     alert('Problem obtaining data: ' + jqXHR.statusText);
 });
 
+//getQuakes()
+//queries the server for the list of recent quakes
+//and plots them on a Google map
+function getQuakes(minMagnitude) {
+    var url = gov.usgs.quakesUrl;
+    if (minMagnitude) {
+        url += '&$where=magnitude>=' + minMagnitude;
+    }
+
+    $.getJSON(url, function(quakes){
+        // quakes is an array of objects, each of which represents info about a quake
+        // see data returned from:
+        //  https://soda.demo.socrata.com/resource/earthquakes.json?$$app_token=Hwu90cjqyFghuAWQgannew7Oi
+
+        // set our global variable to the current set of quakes
+        // so we can reference it later in another event
+        gov.usgs.quakes = quakes;
+
+        // update message html element
+        $('.message').html("Displaying " + quakes.length + " earthquakes");
+
+        // create new google maps object
+        gov.usgs.quakesMap = new google.maps.Map($('.map-container')[0], {
+            center: new google.maps.LatLng(0,0),        //centered on 0/0
+            zoom: 2,                                    //zoom level 2
+            mapTypeId: google.maps.MapTypeId.TERRAIN,   //terrain map
+            streetViewControl: false                    //no street view
+        });
+
+        // update map
+        addQuakeMarkers(quakes, gov.usgs.quakesMap);
+    }); // handle returned data function
+} // getQuakes()
+
+//addQuakeMarkers()
+//parameters
+// - quakes (array) array of quake data objects
+// - map (google.maps.Map) Google map we can add markers to
+// no return value
+function addQuakeMarkers(quakes, map) {
+
+    // loop over the quakes array and add a marker for each quake
+    var quake;                 // current quake data
+    var index;                 // loop counter
+    var infoWindpw; // InfoWindow for quake
+
+    for (index = 0; index < quakes.length; index++) {
+        quake = quakes[index];
+
+        if (quake.location) {
+            quake.mapMarker = new google.maps.Marker({
+                map: map,
+                position: new google.maps.LatLng(quake.location.latitude, quake.location.longitude)
+            });
+
+            infoWindow = new google.maps.InfoWindow({
+                content: new Date(quake.datetime).toLocaleString() + 
+                            ': magnitude ' + quake.magnitude + ' at depth of ' + 
+                            quake.depth + ' meters'
+            });
+
+            registerInfoWindow(map, quake.mapMarker, infoWindow);
+        }
+    }
+} // addQuakeMarkers
+
+function registerInfoWindow(map, marker, infoWindow) {
+    google.maps.event.addListener(marker, 'click', function(){
+        if (gov.usgs.iw) {
+            gov.usgs.iw.close();
+        }
+
+        gov.usgs.iw = infoWindow;
+        infoWindow.open(map, marker);
+
+    });
+} // registerInfoWindow()
+
+// function to call when document is ready
+$(function() {
+    // document is ready for manipulation
+
+    // add 'loading' text and img
+    $('.message').html('Loading... <img src="img/loading.gif">');
+
+    getQuakes();
+
+    // add click listener to refresh button
+    $('.refresh-button').click(function() {
+        var minMagnitude = $('.min-magnitude').val();
+        getQuakes(minMagnitude);
+    });
+}); // doc ready
